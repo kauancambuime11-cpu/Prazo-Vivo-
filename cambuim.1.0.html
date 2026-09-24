@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prazo Vivo - Controle Inteligente de Medicamentos</title>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- HTML5 QR Code Reader -->
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    body { font-family: 'DM Sans', sans-serif; }
+    @keyframes blink-led { 0%,100%{opacity:1} 50%{opacity:0.2} }
+    .led-blink { animation: blink-led 0.8s infinite; }
+    .led { width:12px; height:12px; border-radius:50%; display:inline-block; }
+    .led-green { background:#22c55e; box-shadow:0 0 6px #22c55e; }
+    .led-yellow { background:#eab308; box-shadow:0 0 6px #eab308; }
+    .led-red { background:#ef4444; box-shadow:0 0 6px #ef4444; }
+    .nav-tab { cursor:pointer; padding:0.5rem 1rem; border-radius:0.5rem; transition:all 0.2s; }
+    .nav-tab:hover, .nav-tab.active { background:#dbeafe; color:#1d4ed8; font-weight:600; }
+    .page-section { display:none; }
+    .page-section.active { display:block; }
+    .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:100; align-items:center; justify-content:center; backdrop-filter: blur(2px); }
+    .modal-overlay.show { display:flex; }
+    #reader { width: 100%; max-width: 500px; margin: 0 auto; min-height: 250px; background: #f9fafb; border-radius: 0.75rem; }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-50 flex flex-col justify-between">
+
+  <header class="w-full bg-white shadow-sm border-b border-gray-100">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <button id="mobile-menu-btn" class="lg:hidden p-2 rounded-lg hover:bg-gray-100">
+          <i data-lucide="menu" class="w-6 h-6 text-blue-700"></i>
+        </button>
+        <div class="flex items-center gap-2">
+          <div class="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center">
+            <i data-lucide="pill" class="w-5 h-5 text-white"></i>
+          </div>
+          <div>
+            <h1 class="text-lg font-bold text-blue-700 leading-tight">Prazo Vivo</h1>
+            <p class="text-[10px] text-gray-500 leading-tight hidden sm:block">Controle inteligente para medicamentos dentro do prazo.</p>
+          </div>
+        </div>
+      </div>
+
+      <div id="search-container" class="flex-1 max-w-xl hidden">
+        <div class="relative">
+          <input id="search-input" type="text" class="w-full pl-10 pr-4 py-2 rounded-full border border-gray-200 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-300 text-sm" placeholder="Pesquisar medicamento...">
+          <i data-lucide="search" class="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <!-- Notification Button -->
+        <button id="notif-btn" class="relative p-2 rounded-lg hover:bg-gray-100 transition" title="Notificações">
+          <i data-lucide="bell" class="w-5 h-5 text-gray-700"></i>
+          <span id="notif-badge" class="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">0</span>
+        </button>
+
+        <!-- SECURITY LOCK BUTTON -->
+        <button id="security-lock-btn" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition text-xs font-semibold" title="Área de Segurança (Clique para desbloquear/bloquear)">
+          <i id="lock-icon" data-lucide="lock" class="w-4 h-4 text-amber-600"></i>
+          <span id="lock-status-text" class="hidden sm:inline">Modo Leitura</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Bar -->
+  <nav class="w-full bg-white border-b border-gray-100 sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-2 flex gap-1 overflow-x-auto" id="nav-tabs">
+      <button class="nav-tab active" data-page="dashboard">Dashboard</button>
+      <button class="nav-tab" data-page="shelves">Prateleiras</button>
+      <button class="nav-tab" data-page="medications">Medicamentos</button>
+      <button class="nav-tab" data-page="qrcode">Ler QR Code</button>
+      <button class="nav-tab" data-page="notifications">Notificações</button>
+      <button class="nav-tab" data-page="history">Histórico</button>
+      <button class="nav-tab" data-page="about">Quem Somos</button>
+    </div>
+  </nav>
+
+  <!-- Mobile Drawer Navigation -->
+  <div id="mobile-nav" class="fixed inset-0 bg-black/50 z-[200] hidden">
+    <div class="w-64 bg-white h-full p-6 flex flex-col gap-2">
+      <button id="close-mobile-nav" class="self-end p-2"><i data-lucide="x" class="w-6 h-6"></i></button>
+      <button class="nav-tab text-left" data-page="dashboard">Dashboard</button>
+      <button class="nav-tab text-left" data-page="shelves">Prateleiras</button>
+      <button class="nav-tab text-left" data-page="medications">Medicamentos</button>
+      <button class="nav-tab text-left" data-page="qrcode">Ler QR Code</button>
+      <button class="nav-tab text-left" data-page="notifications">Notificações</button>
+      <button class="nav-tab text-left" data-page="history">Histórico</button>
+      <button class="nav-tab text-left" data-page="about">Quem Somos</button>
+    </div>
+  </div>
+
+  <main class="max-w-7xl mx-auto px-4 py-6 w-full flex-grow">
+
+    <!-- PAGE: DASHBOARD -->
+    <section id="page-dashboard" class="page-section active">
+      <div class="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 class="text-2xl font-bold text-gray-800">Olá! Bem-vindo ao Prazo Vivo</h2>
+          <p class="text-gray-500 mt-1 text-sm">Acompanhe em tempo real a validade dos medicamentos armazenados.</p>
+        </div>
+        <div id="security-banner" class="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-2 rounded-xl text-xs flex items-center gap-2">
+          <i data-lucide="shield-alert" class="w-4 h-4 shrink-0 text-amber-600"></i>
+          <span>Modo de segurança ativo. Clique no cadeado no topo para realizar alterações.</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="rounded-xl p-4 bg-green-50 border border-green-200">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="led led-green"></span>
+            <span class="text-sm font-medium text-green-700">Hábil para venda</span>
+          </div>
+          <p id="count-ok" class="text-3xl font-bold text-green-700">0</p>
+        </div>
+        <div class="rounded-xl p-4 bg-yellow-50 border border-yellow-200">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="led led-yellow"></span>
+            <span class="text-sm font-medium text-yellow-700">Reduzir valor</span>
+          </div>
+          <p id="count-attention" class="text-3xl font-bold text-yellow-700">0</p>
+        </div>
+        <div class="rounded-xl p-4 bg-red-50 border border-red-200">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="led led-red"></span>
+            <span class="text-sm font-medium text-red-700">Venda proibida</span>
+          </div>
+          <p id="count-danger" class="text-3xl font-bold text-red-700">0</p>
+        </div>
+        <div class="rounded-xl p-4 bg-gray-100 border border-gray-300">
+          <div class="flex items-center gap-2 mb-2">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-red-600"></i>
+            <span class="text-sm font-medium text-gray-700">Vencidos</span>
+          </div>
+          <p id="count-expired" class="text-3xl font-bold text-gray-700">0</p>
+        </div>
+      </div>
+
+      <h3 class="text-lg font-semibold text-gray-800 mb-4">Monitoramento das Prateleiras</h3>
+      <div id="dashboard-shelves" class="space-y-4"></div>
+    </section>
+
+    <!-- PAGE: SHELVES -->
+    <section id="page-shelves" class="page-section">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">Visualização Detalhada das Prateleiras</h2>
+      <div id="shelves-detail" class="space-y-6"></div>
+    </section>
+
+    <!-- PAGE: MEDICATIONS -->
+    <section id="page-medications" class="page-section">
+      <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <h2 class="text-xl font-bold text-gray-800">Gerenciar Medicamentos</h2>
+        <button id="add-med-btn" class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition flex items-center gap-1 shadow-sm">
+          <i data-lucide="plus" class="w-4 h-4"></i> Adicionar Medicamento
+        </button>
+      </div>
+
+      <div class="mb-4 flex gap-2 flex-wrap">
+        <button class="status-filter px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700" data-filter="all">Todos</button>
+        <button class="status-filter px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600" data-filter="ok">Hábil para venda</button>
+        <button class="status-filter px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600" data-filter="attention">Reduzir valor</button>
+        <button class="status-filter px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600" data-filter="danger">Venda proibida</button>
+        <button class="status-filter px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600" data-filter="expired">Vencidos</button>
+      </div>
+
+      <div id="meds-list" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </section>
+
+    <!-- PAGE: QR CODE SCANNER -->
+    <section id="page-qrcode" class="page-section">
+      <div class="max-w-xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
+        <h2 class="text-xl font-bold text-gray-800 mb-2">Escanear QR Code de Medicamento</h2>
+        <p class="text-sm text-gray-500 mb-4">Aponte a câmera para o QR Code do medicamento para dar entrada ou saída do estoque.</p>
+        
+        <div class="flex justify-center gap-2 mb-4">
+          <button id="start-camera-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-2 transition">
+            <i data-lucide="camera" class="w-4 h-4"></i> Ligar Câmera
+          </button>
+          <button id="stop-camera-btn" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-semibold rounded-lg flex items-center gap-2 hidden transition">
+            <i data-lucide="camera-off" class="w-4 h-4"></i> Desligar Câmera
+          </button>
+        </div>
+
+        <div id="reader" class="overflow-hidden border border-gray-200 rounded-xl"></div>
+        <div id="qr-result" class="mt-4 p-3 rounded-lg text-sm font-medium hidden"></div>
+      </div>
+    </section>
+
+    <!-- PAGE: NOTIFICATIONS -->
+    <section id="page-notifications" class="page-section">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">Central de Notificações</h2>
+      <div id="notif-list" class="space-y-3"></div>
+    </section>
+
+    <!-- PAGE: HISTORY -->
+    <section id="page-history" class="page-section">
+      <h2 class="text-xl font-bold text-gray-800 mb-4">Histórico de Alterações</h2>
+      <div id="history-list" class="space-y-3"></div>
+    </section>
+
+    <!-- PAGE: QUEM SOMOS -->
+    <section id="page-about" class="page-section">
+      <div class="max-w-2xl mx-auto bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+        <h2 class="text-2xl font-bold text-blue-700 mb-4">Sobre o Prazo Vivo</h2>
+        <p class="text-gray-600 leading-relaxed mb-6">O Prazo Vivo é um projeto desenvolvido como parte de um Trabalho de Conclusão de Curso, com o objetivo de desenvolver uma solução tecnológica para auxiliar no controle da validade de medicamentos. O projeto integra software e hardware por meio de um sistema de monitoramento visual utilizando LEDs RGB e notificações automáticas.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-700">
+          <div><strong>Curso:</strong> Técnico em mecatrônica</div>
+          <div><strong>Instituição:</strong> SENAI Roberto Mange</div>
+          <div><strong>Orientador:</strong> Meyer e Israel</div>
+          <div><strong>Ano:</strong> 2026</div>
+        </div>
+        <div class="mt-6">
+          <h4 class="font-semibold text-gray-800 mb-2">Integrantes</h4>
+          <p class="text-gray-600">João Victor lopes, Julia Paixão, Kauan Cambuim, Laura Baco e Maria Eduarda Cardoso</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+
+  <!-- MODAL: SECURITY AUTHENTICATION / PASSWORD -->
+  <div id="security-modal" class="modal-overlay">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
+            <i data-lucide="shield-check" class="w-5 h-5 text-blue-600"></i>
+          </div>
+          <h3 class="text-lg font-bold text-gray-800">Autenticação</h3>
+        </div>
+        <button id="close-security-modal" class="p-1 hover:bg-gray-100 rounded text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      
+      <p class="text-xs text-gray-500 mb-4">Insira a senha do sistema para habilitar permissões de edição (Adicionar, Editar e Remover medicamentos).</p>
+      
+      <form id="security-form" class="space-y-4">
+        <div>
+          <label for="password-input" class="block text-xs font-semibold text-gray-700 mb-1">Senha de Segurança</label>
+          <input id="password-input" type="password" required placeholder="••••••••" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <p id="password-error" class="text-xs text-red-600 mt-1.5 hidden font-medium flex items-center gap-1">
+            <i data-lucide="alert-circle" class="w-3.5 h-3.5 shrink-0"></i> Senha incorreta! Tente novamente.
+          </p>
+        </div>
+        <button type="submit" class="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 transition">Desbloquear Edição</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: QR CODE ACTION -->
+  <div id="qr-action-modal" class="modal-overlay">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg mx-4 p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4 border-b pb-3">
+        <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+          <i data-lucide="qr-code" class="w-5 h-5 text-blue-600"></i> QR Code Lido
+        </h3>
+        <button id="close-qr-modal" class="p-1 hover:bg-gray-100 rounded"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+
+      <div id="qr-med-details" class="bg-gray-50 p-4 rounded-xl mb-4 text-sm text-gray-700 border border-gray-200"></div>
+
+      <div class="mb-4">
+        <label class="block text-sm font-semibold text-gray-800 mb-2">Selecione a Operação:</label>
+        <div class="grid grid-cols-2 gap-3">
+          <button id="btn-action-add" class="py-2.5 px-4 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-700 font-bold flex items-center justify-center gap-2 hover:bg-blue-100 transition">
+            <i data-lucide="plus-circle" class="w-5 h-5"></i> Entrada (Adicionar)
+          </button>
+          <button id="btn-action-remove" class="py-2.5 px-4 rounded-xl border-2 border-gray-200 bg-white text-gray-600 font-semibold flex items-center justify-center gap-2 hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition">
+            <i data-lucide="minus-circle" class="w-5 h-5"></i> Saída (Retirar)
+          </button>
+        </div>
+      </div>
+
+      <div id="qr-section-add" class="space-y-3">
+        <label class="block text-sm font-semibold text-gray-800">Selecione uma Posição Livre para Armazenar:</label>
+        <div id="free-slots-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1"></div>
+        <button id="confirm-qr-add" disabled class="w-full py-2.5 bg-blue-600 disabled:bg-gray-300 text-white rounded-xl font-semibold mt-3 hover:bg-blue-700 transition">
+          Confirmar Entrada
+        </button>
+      </div>
+
+      <div id="qr-section-remove" class="space-y-3 hidden">
+        <div id="remove-info-container"></div>
+        <div>
+          <label for="qr-remove-reason" class="text-sm font-medium text-gray-700">Motivo da Saída</label>
+          <select id="qr-remove-reason" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+            <option value="Venda / Consumo">Venda / Consumo</option>
+            <option value="Vencido">Vencido</option>
+            <option value="Descarte / Avaria">Descarte / Avaria</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+        <button id="confirm-qr-remove" class="w-full py-2.5 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition mt-2">
+          Confirmar Retirada
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: MANUAL ADD/EDIT -->
+  <div id="med-modal" class="modal-overlay">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4">
+        <h3 id="modal-title" class="text-lg font-bold text-gray-800">Adicionar Medicamento</h3>
+        <button id="close-modal" class="p-1 hover:bg-gray-100 rounded"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="med-form" class="space-y-3">
+        <div>
+          <label for="med-name" class="text-sm font-medium text-gray-700">Nome</label>
+          <input id="med-name" type="text" required class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+        </div>
+        <div>
+          <label for="med-lot" class="text-sm font-medium text-gray-700">Lote</label>
+          <input id="med-lot" type="text" required class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="med-manufacture" class="text-sm font-medium text-gray-700">Fabricação</label>
+            <input id="med-manufacture" type="date" required class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+          </div>
+          <div>
+            <label for="med-expiry" class="text-sm font-medium text-gray-700">Validade</label>
+            <input id="med-expiry" type="date" required class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="med-shelf" class="text-sm font-medium text-gray-700">Prateleira</label>
+            <select id="med-shelf" required class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+              <option value="1">Prateleira 01</option>
+              <option value="2">Prateleira 02</option>
+              <option value="3">Prateleira 03</option>
+            </select>
+          </div>
+          <div>
+            <label for="med-position" class="text-sm font-medium text-gray-700">Posição</label>
+            <select id="med-position" required class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+              <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+              <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" id="med-submit-btn" class="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 mt-2">Salvar</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: MANUAL REMOVE -->
+  <div id="remove-modal" class="modal-overlay">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm mx-4 p-6">
+      <h3 class="text-lg font-bold text-gray-800 mb-2">Remover Medicamento</h3>
+      <p id="remove-med-name" class="text-sm text-gray-600 mb-3"></p>
+      <div>
+        <label for="remove-reason" class="text-sm font-medium text-gray-700">Motivo</label>
+        <select id="remove-reason" class="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
+          <option value="Vencido">Vencido</option>
+          <option value="Consumido">Consumido</option>
+          <option value="Descarte">Descarte</option>
+          <option value="Outro">Outro</option>
+        </select>
+      </div>
+      <div class="flex gap-2 mt-4">
+        <button id="confirm-remove" class="flex-1 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700">Confirmar</button>
+        <button id="cancel-remove" class="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="bg-white border-t border-gray-100 py-4 text-center text-xs text-gray-500 mt-8">
+    <p>© 2026 Prazo Vivo - SENAI Roberto Mange. Todos os direitos reservados.</p>
+  </footer>
+
+  <script>
+    // State Variables
+    let isUnlocked = false; // Security State
+    const CORRECT_PASSWORD = "07102026";
+
+    let medications = [
+      { id: '1', name: 'Paracetamol 500mg', lot: 'LOT-8832', manufacture_date: '2024-01-10', expiry_date: '2026-10-20', quantity: 30, shelf: 1, position: 1, removed: false },
+      { id: '2', name: 'Amoxicilina 250mg', lot: 'LOT-1049', manufacture_date: '2024-05-15', expiry_date: '2026-10-01', quantity: 20, shelf: 1, position: 2, removed: false },
+      { id: '3', name: 'Ibuprofeno 600mg', lot: 'LOT-3321', manufacture_date: '2024-02-01', expiry_date: '2026-09-15', quantity: 15, shelf: 2, position: 1, removed: false },
+      { id: '4', name: 'Dipirona 1g', lot: 'LOT-0092', manufacture_date: '2023-08-10', expiry_date: '2026-08-01', quantity: 50, shelf: 3, position: 5, removed: false }
+    ];
+
+    let editingRecord = null;
+    let removingRecord = null;
+    let currentFilter = 'all';
+    let currentPage = 'dashboard';
+    let html5QrcodeScanner = null;
+
+    let scannedMedData = null;
+    let selectedSlot = null;
+    let qrOperationMode = 'add';
+
+    // Helper Date & Status Functions
+    function getStatus(expiryDate) {
+      const now = new Date();
+      const exp = new Date(expiryDate);
+      const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+
+      if (diffDays <= 0) return 'expired';
+      if (diffDays <= 30) return 'danger';
+      if (diffDays <= 60) return 'attention';
+      return 'ok';
+    }
+
+    function getStatusLabel(s) {
+      const labels = { ok: 'Hábil para venda', attention: 'Reduzir valor', danger: 'Venda proibida', expired: 'Vencido' };
+      return labels[s] || s;
+    }
+
+    function getLedClass(s) {
+      if (s === 'ok') return 'led led-green';
+      if (s === 'attention') return 'led led-yellow';
+      if (s === 'expired') return 'led bg-gray-400';
+      return 'led led-red led-blink';
+    }
+
+    function getTimeRemaining(expiryDate) {
+      const now = new Date();
+      const exp = new Date(expiryDate);
+      const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+
+      if (diffDays <= 0) return 'Vencido';
+      if (diffDays < 30) return diffDays + ' dias';
+      const months = Math.floor(diffDays / 30);
+      return months + (months === 1 ? ' mês' : ' meses');
+    }
+
+    function getActiveMeds() {
+      return medications.filter(m => !m.removed);
+    }
+
+    function parseDateToISO(dateStr) {
+      if (!dateStr) return new Date().toISOString().split('T')[0];
+      if (dateStr.includes('-')) {
+        const parts = dateStr.split('-');
+        if (parts[0].length === 2 && parts[2].length === 4) {
+          return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+      }
+      return dateStr;
+    }
+
+    // Security System Controllers
+    function updateSecurityUI() {
+      const lockBtn = document.getElementById('security-lock-btn');
+      const lockIcon = document.getElementById('lock-icon');
+      const lockText = document.getElementById('lock-status-text');
+      const securityBanner = document.getElementById('security-banner');
+      const addMedBtn = document.getElementById('add-med-btn');
+
+      if (isUnlocked) {
+        lockBtn.className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 transition text-xs font-semibold";
+        lockIcon.setAttribute('data-lucide', 'unlock');
+        lockText.textContent = "Desbloqueado";
+        if (securityBanner) securityBanner.classList.add('hidden');
+        if (addMedBtn) addMedBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      } else {
+        lockBtn.className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition text-xs font-semibold";
+        lockIcon.setAttribute('data-lucide', 'lock');
+        lockText.textContent = "Modo Leitura";
+        if (securityBanner) securityBanner.classList.remove('hidden');
+        if (addMedBtn) addMedBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      }
+
+      lucide.createIcons();
+      renderMedications(); // Re-render medication list buttons based on permission
+    }
+
+    function openSecurityModal() {
+      document.getElementById('password-input').value = '';
+      document.getElementById('password-error').classList.add('hidden');
+      document.getElementById('security-modal').classList.add('show');
+    }
+
+    function closeSecurityModal() {
+      document.getElementById('security-modal').classList.remove('show');
+    }
+
+    function checkPermissionOrPrompt(actionCallback) {
+      if (isUnlocked) {
+        actionCallback();
+      } else {
+        openSecurityModal();
+      }
+    }
+
+    // QR Code Logic
+    function parseQRCodeText(decodedText) {
+      const medData = { name: '', lot: '', manufacture_date: '', expiry_date: '', quantity: 1 };
+      const lines = decodedText.split('\n');
+      lines.forEach(line => {
+        const parts = line.split(':');
+        if (parts.length >= 2) {
+          const key = parts[0].trim().toLowerCase();
+          const val = parts.slice(1).join(':').trim();
+
+          if (key.includes('medicamento')) medData.name = val;
+          else if (key.includes('lote') && !key.includes('quantidade')) medData.lot = val;
+          else if (key.includes('fabric')) medData.manufacture_date = parseDateToISO(val);
+          else if (key.includes('validade')) medData.expiry_date = parseDateToISO(val);
+          else if (key.includes('quantidade')) medData.quantity = parseInt(val) || 1;
+        }
+      });
+      return medData;
+    }
+
+    function handleQRCodeScan(decodedText) {
+      const parsedData = parseQRCodeText(decodedText);
+      if (!parsedData.name || !parsedData.lot || !parsedData.expiry_date) {
+        showQrResult('QR Code lido, mas não contém as informações necessárias.', 'red');
+        return;
+      }
+      scannedMedData = parsedData;
+      openQrActionModal();
+    }
+
+    function openQrActionModal() {
+      stopQrScanner();
+      selectedSlot = null;
+      qrOperationMode = 'add';
+
+      const details = document.getElementById('qr-med-details');
+      details.innerHTML = `
+        <p><strong>Medicamento:</strong> ${scannedMedData.name}</p>
+        <p><strong>Lote:</strong> ${scannedMedData.lot}</p>
+        <p><strong>Fabricação:</strong> ${new Date(scannedMedData.manufacture_date).toLocaleDateString('pt-BR')}</p>
+        <p><strong>Validade:</strong> ${new Date(scannedMedData.expiry_date).toLocaleDateString('pt-BR')}</p>
+        <p><strong>Quantidade Lote:</strong> ${scannedMedData.quantity}</p>
+      `;
+
+      switchQrTab('add');
+      document.getElementById('qr-action-modal').classList.add('show');
+    }
+
+    function switchQrTab(mode) {
+      qrOperationMode = mode;
+      const btnAdd = document.getElementById('btn-action-add');
+      const btnRemove = document.getElementById('btn-action-remove');
+      const secAdd = document.getElementById('qr-section-add');
+      const secRemove = document.getElementById('qr-section-remove');
+
+      if (mode === 'add') {
+        btnAdd.className = "py-2.5 px-4 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-700 font-bold flex items-center justify-center gap-2 transition";
+        btnRemove.className = "py-2.5 px-4 rounded-xl border-2 border-gray-200 bg-white text-gray-600 font-semibold flex items-center justify-center gap-2 hover:bg-red-50 hover:text-red-600 transition";
+        secAdd.classList.remove('hidden');
+        secRemove.classList.add('hidden');
+        renderFreeSlots();
+      } else {
+        btnRemove.className = "py-2.5 px-4 rounded-xl border-2 border-red-600 bg-red-50 text-red-700 font-bold flex items-center justify-center gap-2 transition";
+        btnAdd.className = "py-2.5 px-4 rounded-xl border-2 border-gray-200 bg-white text-gray-600 font-semibold flex items-center justify-center gap-2 hover:bg-blue-50 hover:text-blue-600 transition";
+        secRemove.classList.remove('hidden');
+        secAdd.classList.add('hidden');
+        renderRemoveInfo();
+      }
+    }
+
+    function renderFreeSlots() {
+      const grid = document.getElementById('free-slots-grid');
+      grid.innerHTML = '';
+      const active = getActiveMeds();
+      const confirmBtn = document.getElementById('confirm-qr-add');
+      confirmBtn.disabled = true;
+
+      let freeSlots = [];
+      for (let s = 1; s <= 3; s++) {
+        for (let p = 1; p <= 6; p++) {
+          const occupied = active.find(m => Number(m.shelf) === s && Number(m.position) === p);
+          if (!occupied) {
+            freeSlots.push({ shelf: s, position: p });
+          }
+        }
+      }
+
+      if (freeSlots.length === 0) {
+        grid.innerHTML = '<p class="text-xs text-red-600 font-bold col-span-full">Não há compartimentos livres!</p>';
+        return;
+      }
+
+      freeSlots.forEach(slot => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'slot-select-btn p-2 text-xs border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 text-center transition';
+        btn.innerHTML = `<span class="block font-semibold text-gray-800">Prat. 0${slot.shelf}</span><span class="text-gray-500">Posição ${slot.position}</span>`;
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.slot-select-btn').forEach(b => b.classList.remove('border-blue-600', 'bg-blue-100', 'ring-2', 'ring-blue-300'));
+          btn.classList.add('border-blue-600', 'bg-blue-100', 'ring-2', 'ring-blue-300');
+          selectedSlot = slot;
+          confirmBtn.disabled = false;
+        });
+        grid.appendChild(btn);
+      });
+    }
+
+    function renderRemoveInfo() {
+      const container = document.getElementById('remove-info-container');
+      const active = getActiveMeds();
+      const found = active.find(m => m.name.toLowerCase() === scannedMedData.name.toLowerCase() || m.lot === scannedMedData.lot);
+
+      if (found) {
+        container.innerHTML = `
+          <div class="p-3 bg-red-50 border border-red-200 rounded-lg text-xs text-red-800">
+            <p><strong>Item localizado na prateleira!</strong></p>
+            <p><strong>Prateleira 0${found.shelf}</strong> - Posição ${found.position}</p>
+            <p><strong>Lote:</strong> ${found.lot}</p>
+          </div>
+        `;
+        document.getElementById('confirm-qr-remove').disabled = false;
+      } else {
+        container.innerHTML = `
+          <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-xs text-yellow-800">
+            <p>Este medicamento/lote não consta como armazenado no momento nas prateleiras.</p>
+          </div>
+        `;
+        document.getElementById('confirm-qr-remove').disabled = true;
+      }
+    }
+
+    function closeQrModal() {
+      document.getElementById('qr-action-modal').classList.remove('show');
+      scannedMedData = null;
+      selectedSlot = null;
+    }
+
+    function showQrResult(msg, type) {
+      const el = document.getElementById('qr-result');
+      el.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-red-100', 'text-red-800');
+      el.classList.add(type === 'green' ? 'bg-green-100' : 'bg-red-100', type === 'green' ? 'text-green-800' : 'text-red-800');
+      el.textContent = msg;
+    }
+
+    function updateSearchVisibility() {
+      const searchContainer = document.getElementById('search-container');
+      if (currentPage === 'shelves' || currentPage === 'medications') {
+        searchContainer.classList.remove('hidden');
+      } else {
+        searchContainer.classList.add('hidden');
+      }
+    }
+
+    function renderDashboard() {
+      const active = getActiveMeds();
+      const counts = { ok: 0, attention: 0, danger: 0, expired: 0 };
+      
+      active.forEach(m => {
+        const s = getStatus(m.expiry_date);
+        counts[s] = (counts[s] || 0) + 1;
+      });
+
+      document.getElementById('count-ok').textContent = counts.ok;
+      document.getElementById('count-attention').textContent = counts.attention;
+      document.getElementById('count-danger').textContent = counts.danger;
+      document.getElementById('count-expired').textContent = counts.expired;
+      document.getElementById('notif-badge').textContent = counts.attention + counts.danger + counts.expired;
+
+      const container = document.getElementById('dashboard-shelves');
+      container.innerHTML = '';
+      for (let s = 1; s <= 3; s++) {
+        const shelfMeds = active.filter(m => Number(m.shelf) === s);
+        const div = document.createElement('div');
+        div.className = 'bg-white rounded-xl border border-gray-100 p-4 shadow-sm';
+        div.innerHTML = `<h4 class="font-semibold text-gray-700 mb-3 flex items-center gap-2"><i data-lucide="layout-grid" class="w-4 h-4 text-blue-700"></i> Prateleira 0${s}</h4><div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">${renderShelfSlots(shelfMeds)}</div>`;
+        container.appendChild(div);
+      }
+      lucide.createIcons();
+    }
+
+    function renderShelfSlots(meds) {
+      let html = '';
+      for (let p = 1; p <= 6; p++) {
+        const med = meds.find(m => Number(m.position) === p);
+        if (med) {
+          const status = getStatus(med.expiry_date);
+          html += `<div class="border border-gray-100 rounded-lg p-2 text-center text-xs bg-gray-50"><span class="${getLedClass(status)}"></span><p class="font-medium text-gray-800 mt-1 truncate">${med.name}</p><p class="text-gray-500">${getTimeRemaining(med.expiry_date)}</p></div>`;
+        } else {
+          html += `<div class="border border-dashed border-gray-200 rounded-lg p-2 text-center text-xs text-gray-400 flex items-center justify-center h-16">Vazio</div>`;
+        }
+      }
+      return html;
+    }
+
+    function renderShelves() {
+      const active = getActiveMeds();
+      const container = document.getElementById('shelves-detail');
+      const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
+      container.innerHTML = '';
+
+      for (let s = 1; s <= 3; s++) {
+        const shelfMeds = active.filter(m => Number(m.shelf) === s);
+        const div = document.createElement('div');
+        div.className = 'bg-white rounded-xl border border-gray-100 p-5 shadow-sm';
+        let cards = '';
+
+        for (let p = 1; p <= 6; p++) {
+          const med = shelfMeds.find(m => Number(m.position) === p);
+          if (med) {
+            const status = getStatus(med.expiry_date);
+            const matchesSearch = searchTerm && med.name.toLowerCase().includes(searchTerm);
+            
+            const borderBgClass = matchesSearch 
+              ? 'border-2 border-blue-500 bg-yellow-100 ring-2 ring-blue-300' 
+              : (status==='expired'?'border-gray-300 bg-gray-100':status==='danger'?'border-red-200 bg-red-50':status==='attention'?'border-yellow-200 bg-yellow-50':'border-green-100 bg-green-50/30');
+
+            cards += `<div class="border rounded-lg p-3 transition-all ${borderBgClass}">
+              <div class="flex items-center justify-between mb-1">
+                <div class="flex items-center gap-2"><span class="${getLedClass(status)}"></span><span class="text-xs font-medium text-gray-500">P${p}</span></div>
+                ${matchesSearch ? '<span class="text-[10px] font-bold bg-blue-600 text-white px-1.5 py-0.5 rounded">LOCALIZADO</span>' : ''}
+              </div>
+              <p class="font-semibold text-gray-800 text-sm">${med.name}</p>
+              <p class="text-xs text-gray-600 font-medium mt-0.5">Lote: ${med.lot} · Qtd: ${med.quantity || 1}</p>
+              <p class="text-xs text-gray-500 mt-0.5">Val: ${new Date(med.expiry_date).toLocaleDateString('pt-BR')}</p>
+              <p class="text-xs font-medium mt-1 ${status==='ok'?'text-green-600':status==='attention'?'text-yellow-600':'text-red-600'}">${getStatusLabel(status)} · ${getTimeRemaining(med.expiry_date)}</p>
+            </div>`;
+          } else {
+            cards += `<div class="border border-dashed border-gray-200 rounded-lg p-3 flex items-center justify-center text-gray-400 text-xs min-h-[80px]">Posição ${p} - Vazio</div>`;
+          }
+        }
+        div.innerHTML = `<h4 class="font-semibold text-gray-700 mb-3 text-lg">Prateleira 0${s}</h4><div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">${cards}</div>`;
+        container.appendChild(div);
+      }
+    }
+
+    function renderMedications() {
+      const active = getActiveMeds();
+      const container = document.getElementById('meds-list');
+      const searchTerm = document.getElementById('search-input').value.toLowerCase().trim();
+      
+      let filtered = active;
+      if (currentFilter !== 'all') {
+        filtered = active.filter(m => getStatus(m.expiry_date) === currentFilter);
+      }
+
+      if (searchTerm) {
+        filtered = filtered.filter(m => m.name.toLowerCase().includes(searchTerm));
+      }
+
+      container.innerHTML = filtered.length === 0 ? '<p class="text-gray-400 text-sm col-span-full text-center py-8">Nenhum medicamento encontrado.</p>' : '';
+
+      filtered.forEach(med => {
+        const status = getStatus(med.expiry_date);
+        const card = document.createElement('div');
+        card.className = 'bg-white border border-gray-100 rounded-xl p-4 shadow-sm';
+        card.innerHTML = `
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex items-center gap-2"><span class="${getLedClass(status)}"></span><span class="font-semibold text-gray-800">${med.name}</span></div>
+            <span class="text-xs px-2 py-0.5 rounded-full ${status==='ok'?'bg-green-100 text-green-700':status==='attention'?'bg-yellow-100 text-yellow-700':'bg-red-100 text-red-700'}">${getStatusLabel(status)}</span>
+          </div>
+          <p class="text-xs text-gray-500">Lote: ${med.lot} · Qtd: ${med.quantity || 1} · Prat. ${med.shelf} · Pos. ${med.position}</p>
+          <p class="text-xs text-gray-500">Validade: ${new Date(med.expiry_date).toLocaleDateString('pt-BR')} · ${getTimeRemaining(med.expiry_date)}</p>
+          <div class="flex gap-2 mt-3">
+            <button class="edit-btn text-xs px-3 py-1 ${isUnlocked ? 'bg-blue-50 text-blue-700 hover:bg-blue-100' : 'bg-gray-100 text-gray-400'} rounded-lg font-medium transition" data-id="${med.id}">Editar</button>
+            <button class="remove-btn text-xs px-3 py-1 ${isUnlocked ? 'bg-red-50 text-red-700 hover:bg-red-100' : 'bg-gray-100 text-gray-400'} rounded-lg font-medium transition" data-id="${med.id}">Remover</button>
+          </div>`;
+        container.appendChild(card);
+      });
+
+      container.querySelectorAll('.edit-btn').forEach(btn => {
+        btn.addEventListener('click', () => checkPermissionOrPrompt(() => openModal(btn.dataset.id)));
+      });
+      container.querySelectorAll('.remove-btn').forEach(btn => {
+        btn.addEventListener('click', () => checkPermissionOrPrompt(() => openRemoveModal(btn.dataset.id)));
+      });
+    }
+
+    function renderNotifications() {
+      const active = getActiveMeds();
+      const container = document.getElementById('notif-list');
+      const notifs = [];
+
+      active.forEach(m => {
+        const s = getStatus(m.expiry_date);
+        const remaining = getTimeRemaining(m.expiry_date);
+        if (s === 'attention') notifs.push({ level: 'yellow', icon: 'alert-circle', text: `Reduzir Valor: ${m.name} possui ${remaining} para o vencimento.` });
+        if (s === 'danger') notifs.push({ level: 'red', icon: 'alert-triangle', text: `Venda Proibida: ${m.name} possui ${remaining} para o vencimento. Retire da área de vendas!` });
+        if (s === 'expired') notifs.push({ level: 'gray', icon: 'x-circle', text: `${m.name} está vencido. Retire imediatamente.` });
+      });
+
+      container.innerHTML = notifs.length === 0 ? '<p class="text-gray-400 text-sm text-center py-8">Nenhuma notificação no momento.</p>' : '';
+      notifs.forEach(n => {
+        const colors = n.level === 'yellow' ? 'border-yellow-200 bg-yellow-50' : n.level === 'red' ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50';
+        container.innerHTML += `<div class="flex items-start gap-3 p-3 rounded-lg border ${colors}"><i data-lucide="${n.icon}" class="w-4 h-4 mt-0.5 shrink-0 ${n.level==='yellow'?'text-yellow-600':n.level==='red'?'text-red-600':'text-gray-500'}"></i><p class="text-sm text-gray-700">${n.text}</p></div>`;
+      });
+      lucide.createIcons();
+    }
+
+    function renderHistory() {
+      const removed = medications.filter(m => m.removed);
+      const container = document.getElementById('history-list');
+      container.innerHTML = removed.length === 0 ? '<p class="text-gray-400 text-sm text-center py-8">Nenhum registro no histórico.</p>' : '';
+      
+      removed.sort((a, b) => new Date(b.removed_date) - new Date(a.removed_date)).forEach(m => {
+        container.innerHTML += `<div class="flex items-center justify-between p-3 bg-white rounded-lg border border-gray-100 shadow-sm">
+          <div>
+            <p class="font-medium text-gray-800 text-sm">${m.name}</p>
+            <p class="text-xs text-gray-500">Prat. ${m.shelf} · Pos. ${m.position} · Lote: ${m.lot}</p>
+          </div>
+          <div class="text-right">
+            <p class="text-xs text-gray-500">${m.removed_date ? new Date(m.removed_date).toLocaleDateString('pt-BR') : '-'}</p>
+            <p class="text-xs font-medium text-red-600">${m.removal_reason || 'Removido'}</p>
+          </div>
+        </div>`;
+      });
+    }
+
+    function renderAll() {
+      renderDashboard();
+      renderShelves();
+      renderMedications();
+      renderNotifications();
+      renderHistory();
+    }
+
+    function startQrScanner() {
+      if (html5QrcodeScanner) return;
+
+      document.getElementById('start-camera-btn').classList.add('hidden');
+      document.getElementById('stop-camera-btn').classList.remove('hidden');
+
+      html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+        fps: 10, 
+        qrbox: { width: 220, height: 220 },
+        rememberLastUsedCamera: true
+      });
+      
+      html5QrcodeScanner.render(
+        (decodedText) => handleQRCodeScan(decodedText),
+        (errorMessage) => {
+          if (typeof errorMessage === 'string' && (errorMessage.includes('NotReadableError') || errorMessage.includes('Device in use'))) {
+            showQrResult('Erro: A câmera está sendo usada por outro aplicativo.', 'red');
+          }
+        }
+      );
+    }
+
+    function stopQrScanner() {
+      if (html5QrcodeScanner) {
+        html5QrcodeScanner.clear().then(() => {
+          html5QrcodeScanner = null;
+          document.getElementById('start-camera-btn').classList.remove('hidden');
+          document.getElementById('stop-camera-btn').classList.add('hidden');
+        }).catch(() => {
+          html5QrcodeScanner = null;
+          document.getElementById('start-camera-btn').classList.remove('hidden');
+          document.getElementById('stop-camera-btn').classList.add('hidden');
+        });
+      }
+    }
+
+    function openModal(id = null) {
+      editingRecord = id ? medications.find(m => m.id === id) : null;
+      document.getElementById('modal-title').textContent = editingRecord ? 'Editar Medicamento' : 'Adicionar Medicamento';
+      
+      if (editingRecord) {
+        document.getElementById('med-name').value = editingRecord.name;
+        document.getElementById('med-lot').value = editingRecord.lot;
+        document.getElementById('med-manufacture').value = editingRecord.manufacture_date;
+        document.getElementById('med-expiry').value = editingRecord.expiry_date;
+        document.getElementById('med-shelf').value = editingRecord.shelf;
+        document.getElementById('med-position').value = editingRecord.position;
+      } else {
+        document.getElementById('med-form').reset();
+      }
+      document.getElementById('med-modal').classList.add('show');
+    }
+
+    function closeModal() {
+      document.getElementById('med-modal').classList.remove('show');
+      editingRecord = null;
+    }
+
+    function openRemoveModal(id) {
+      removingRecord = medications.find(m => m.id === id);
+      if (!removingRecord) return;
+      document.getElementById('remove-med-name').textContent = `Deseja remover "${removingRecord.name}"?`;
+      document.getElementById('remove-modal').classList.add('show');
+    }
+
+    function closeRemoveModal() {
+      document.getElementById('remove-modal').classList.remove('show');
+      removingRecord = null;
+    }
+
+    function navigateTo(pageId) {
+      currentPage = pageId;
+      document.querySelectorAll('.page-section').forEach(sec => sec.classList.remove('active'));
+      document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.page === pageId);
+      });
+
+      const pageSection = document.getElementById(`page-${pageId}`);
+      if (pageSection) pageSection.classList.add('active');
+
+      updateSearchVisibility();
+
+      if (pageId !== 'qrcode') {
+        stopQrScanner();
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      renderAll();
+      updateSecurityUI();
+
+      // Navigation Event Handlers
+      document.querySelectorAll('.nav-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+          navigateTo(tab.dataset.page);
+          document.getElementById('mobile-nav').classList.add('hidden');
+        });
+      });
+
+      document.getElementById('notif-btn').addEventListener('click', () => navigateTo('notifications'));
+
+      // SECURITY LOCK EVENT LISTENERS
+      document.getElementById('security-lock-btn').addEventListener('click', () => {
+        if (isUnlocked) {
+          isUnlocked = false; // Relock immediately
+          updateSecurityUI();
+        } else {
+          openSecurityModal();
+        }
+      });
+
+      document.getElementById('close-security-modal').addEventListener('click', closeSecurityModal);
+
+      document.getElementById('security-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const pwd = document.getElementById('password-input').value;
+        if (pwd === CORRECT_PASSWORD) {
+          isUnlocked = true;
+          updateSecurityUI();
+          closeSecurityModal();
+        } else {
+          document.getElementById('password-error').classList.remove('hidden');
+        }
+      });
+
+      // QR Code Controls
+      document.getElementById('start-camera-btn').addEventListener('click', startQrScanner);
+      document.getElementById('stop-camera-btn').addEventListener('click', stopQrScanner);
+
+      document.getElementById('btn-action-add').addEventListener('click', () => switchQrTab('add'));
+      document.getElementById('btn-action-remove').addEventListener('click', () => switchQrTab('remove'));
+      document.getElementById('close-qr-modal').addEventListener('click', closeQrModal);
+
+      document.getElementById('confirm-qr-add').addEventListener('click', () => {
+        checkPermissionOrPrompt(() => {
+          if (!scannedMedData || !selectedSlot) return;
+
+          const newMed = {
+            id: Date.now().toString(),
+            name: scannedMedData.name,
+            lot: scannedMedData.lot,
+            manufacture_date: scannedMedData.manufacture_date,
+            expiry_date: scannedMedData.expiry_date,
+            quantity: scannedMedData.quantity,
+            shelf: selectedSlot.shelf,
+            position: selectedSlot.position,
+            removed: false
+          };
+
+          medications.push(newMed);
+          renderAll();
+          closeQrModal();
+          showQrResult(`Medicamento "${newMed.name}" adicionado com sucesso na Prateleira 0${newMed.shelf} - Posição ${newMed.position}!`, 'green');
+        });
+      });
+
+      document.getElementById('confirm-qr-remove').addEventListener('click', () => {
+        checkPermissionOrPrompt(() => {
+          if (!scannedMedData) return;
+          const active = getActiveMeds();
+          const found = active.find(m => m.name.toLowerCase() === scannedMedData.name.toLowerCase() || m.lot === scannedMedData.lot);
+
+          if (found) {
+            found.removed = true;
+            found.removed_date = new Date().toISOString();
+            found.removal_reason = document.getElementById('qr-remove-reason').value;
+            renderAll();
+            closeQrModal();
+            showQrResult(`Medicamento "${found.name}" retirado com sucesso da Prateleira 0${found.shelf}!`, 'green');
+          }
+        });
+      });
+
+      // Mobile Menu
+      document.getElementById('mobile-menu-btn').addEventListener('click', () => {
+        document.getElementById('mobile-nav').classList.remove('hidden');
+      });
+
+      document.getElementById('close-mobile-nav').addEventListener('click', () => {
+        document.getElementById('mobile-nav').classList.add('hidden');
+      });
+
+      // Add/Edit Medication Buttons
+      document.getElementById('add-med-btn').addEventListener('click', () => {
+        checkPermissionOrPrompt(() => openModal());
+      });
+
+      document.getElementById('close-modal').addEventListener('click', closeModal);
+
+      document.getElementById('med-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        checkPermissionOrPrompt(() => {
+          const name = document.getElementById('med-name').value;
+          const lot = document.getElementById('med-lot').value;
+          const manufacture_date = document.getElementById('med-manufacture').value;
+          const expiry_date = document.getElementById('med-expiry').value;
+          const shelf = Number(document.getElementById('med-shelf').value);
+          const position = Number(document.getElementById('med-position').value);
+
+          if (editingRecord) {
+            editingRecord.name = name;
+            editingRecord.lot = lot;
+            editingRecord.manufacture_date = manufacture_date;
+            editingRecord.expiry_date = expiry_date;
+            editingRecord.shelf = shelf;
+            editingRecord.position = position;
+          } else {
+            medications.push({
+              id: Date.now().toString(),
+              name, lot, manufacture_date, expiry_date, quantity: 1, shelf, position, removed: false
+            });
+          }
+
+          renderAll();
+          closeModal();
+        });
+      });
+
+      // Remove Confirmations
+      document.getElementById('confirm-remove').addEventListener('click', () => {
+        checkPermissionOrPrompt(() => {
+          if (removingRecord) {
+            removingRecord.removed = true;
+            removingRecord.removed_date = new Date().toISOString();
+            removingRecord.removal_reason = document.getElementById('remove-reason').value;
+            renderAll();
+            closeRemoveModal();
+          }
+        });
+      });
+
+      document.getElementById('cancel-remove').addEventListener('click', closeRemoveModal);
+
+      // Filtering and Searching
+      document.querySelectorAll('.status-filter').forEach(btn => {
+        btn.addEventListener('click', () => {
+          currentFilter = btn.dataset.filter;
+          document.querySelectorAll('.status-filter').forEach(b => {
+            b.classList.remove('bg-blue-100', 'text-blue-700');
+            b.classList.add('bg-gray-100', 'text-gray-600');
+          });
+          btn.classList.remove('bg-gray-100', 'text-gray-600');
+          btn.classList.add('bg-blue-100', 'text-blue-700');
+          renderMedications();
+        });
+      });
+
+      document.getElementById('search-input').addEventListener('input', () => {
+        if (currentPage === 'shelves') renderShelves();
+        if (currentPage === 'medications') renderMedications();
+      });
+
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>
