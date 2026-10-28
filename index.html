@@ -545,7 +545,6 @@
         if (addMedBtn) addMedBtn.classList.remove('opacity-50', 'cursor-not-allowed');
         if (startCameraBtn) {
           startCameraBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-          startCameraBtn.title = "";
         }
         if (qrInstruction) qrInstruction.textContent = "Aponte a câmera para o QR Code do medicamento para dar entrada ou saída do estoque.";
       } else {
@@ -555,11 +554,9 @@
         if (securityBanner) securityBanner.classList.remove('hidden');
         if (addMedBtn) addMedBtn.classList.add('opacity-50', 'cursor-not-allowed');
         
-        // Desliga a câmera se estiver ligada ao bloquear
         stopQrScanner();
         if (startCameraBtn) {
           startCameraBtn.classList.add('opacity-50', 'cursor-not-allowed');
-          startCameraBtn.title = "Desbloqueie o sistema para usar a câmera";
         }
         if (qrInstruction) qrInstruction.textContent = "⚠️ Câmera bloqueada no Modo Leitura. Clique no cadeado no topo para desbloquear.";
       }
@@ -902,7 +899,7 @@
       }
     });
 
-    // QR CODE SCANNER COM PROTEÇÃO DE MODO LEITURA
+    // QR CODE SCANNER COM PROTEÇÃO E CORREÇÃO DE SELEÇÃO
     document.getElementById('start-camera-btn').addEventListener('click', () => {
       if (!isUnlocked) {
         openSecurityModal();
@@ -1059,6 +1056,21 @@
     }
 
     document.getElementById('confirm-qr-add').addEventListener('click', () => {
+      const activeBtn = document.querySelector('.slot-select-btn.border-blue-600');
+      
+      if (!selectedSlot && activeBtn) {
+        const text = activeBtn.innerText;
+        const shelfMatch = text.match(/Prat\.?\s*0?(\d+)/i);
+        const posMatch = text.match(/Posi[çc][ãa]o\s*(\d+)/i);
+        
+        if (shelfMatch && posMatch) {
+          selectedSlot = {
+            shelf: Number(shelfMatch[1]),
+            position: Number(posMatch[1])
+          };
+        }
+      }
+
       if (selectedSlot && scannedMedData) {
         const newMed = {
           name: scannedMedData.name || 'Medicamento',
@@ -1072,6 +1084,9 @@
 
         saveMedicationToFirebase(newMed);
         document.getElementById('qr-action-modal').classList.remove('show');
+        selectedSlot = null;
+      } else {
+        alert('Por favor, selecione uma posição válida na prateleira antes de confirmar.');
       }
     });
 
