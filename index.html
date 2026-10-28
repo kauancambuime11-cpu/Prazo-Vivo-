@@ -180,7 +180,7 @@
     <section id="page-qrcode" class="page-section">
       <div class="max-w-xl mx-auto bg-white p-6 rounded-2xl shadow-sm border border-gray-100 text-center">
         <h2 class="text-xl font-bold text-gray-800 mb-2">Escanear QR Code de Medicamento</h2>
-        <p id="qr-instruction-text" class="text-sm text-gray-500 mb-4">Aponte a câmera para o QR Code do medicamento para dar entrada ou saída do estoque.</p>
+        <p class="text-sm text-gray-500 mb-4">Aponte a câmera para o QR Code do medicamento para dar entrada ou saída do estoque.</p>
         
         <div class="flex justify-center gap-2 mb-4">
           <button id="start-camera-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg flex items-center gap-2 transition">
@@ -283,7 +283,7 @@
       <div id="qr-section-add" class="space-y-3">
         <label class="block text-sm font-semibold text-gray-800">Selecione uma Posição Livre:</label>
         <div id="free-slots-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1"></div>
-        <button id="confirm-qr-add" class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-semibold mt-3 hover:bg-blue-700 transition cursor-pointer">
+        <button id="confirm-qr-add" disabled class="w-full py-2.5 bg-blue-600 disabled:bg-gray-300 text-white rounded-xl font-semibold mt-3 hover:bg-blue-700 transition">
           Confirmar Entrada
         </button>
       </div>
@@ -507,7 +507,7 @@
         lote: med.lot,
         fabricacao: med.manufacture_date,
         validade: med.expiry_date,
-        quantidade: med.quantidade,
+        quantidade: med.quantity,
         prateleira: med.shelf,
         posicao: med.position,
         ledColor: ledColor,
@@ -519,6 +519,7 @@
       const key = `p${shelf}_pos${position}`;
       db.ref(`prazo-vivo/estoque/${key}`).remove();
 
+      // Log do histórico
       historyLogs.unshift({
         date: new Date().toLocaleString('pt-BR'),
         action: `Removido slot P${shelf}_POS${position}`,
@@ -527,15 +528,13 @@
       renderHistory();
     }
 
-    // SEGURANÇA E BLOQUEIO DA CÂMERA NO MODO LEITURA
+    // SEGURANÇA
     function updateSecurityUI() {
       const lockBtn = document.getElementById('security-lock-btn');
       const lockIcon = document.getElementById('lock-icon');
       const lockText = document.getElementById('lock-status-text');
       const securityBanner = document.getElementById('security-banner');
       const addMedBtn = document.getElementById('add-med-btn');
-      const startCameraBtn = document.getElementById('start-camera-btn');
-      const qrInstruction = document.getElementById('qr-instruction-text');
 
       if (isUnlocked) {
         lockBtn.className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 transition text-xs font-semibold";
@@ -543,22 +542,12 @@
         lockText.textContent = "Desbloqueado";
         if (securityBanner) securityBanner.classList.add('hidden');
         if (addMedBtn) addMedBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-        if (startCameraBtn) {
-          startCameraBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-        }
-        if (qrInstruction) qrInstruction.textContent = "Aponte a câmera para o QR Code do medicamento para dar entrada ou saída do estoque.";
       } else {
         lockBtn.className = "flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition text-xs font-semibold";
         lockIcon.setAttribute('data-lucide', 'lock');
         lockText.textContent = "Modo Leitura";
         if (securityBanner) securityBanner.classList.remove('hidden');
         if (addMedBtn) addMedBtn.classList.add('opacity-50', 'cursor-not-allowed');
-        
-        stopQrScanner();
-        if (startCameraBtn) {
-          startCameraBtn.classList.add('opacity-50', 'cursor-not-allowed');
-        }
-        if (qrInstruction) qrInstruction.textContent = "⚠️ Câmera bloqueada no Modo Leitura. Clique no cadeado no topo para desbloquear.";
       }
 
       lucide.createIcons();
@@ -567,7 +556,7 @@
 
     function checkPermissionOrPrompt(actionCallback) {
       if (isUnlocked) {
-        if (actionCallback) actionCallback();
+        actionCallback();
       } else {
         document.getElementById('password-input').value = '';
         document.getElementById('password-error').classList.add('hidden');
@@ -790,7 +779,7 @@
       });
     }
 
-    // NAVEGAÇÃO
+    // NAVEGAÇÃO ENTRE ABAS
     document.querySelectorAll('.nav-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         const page = tab.getAttribute('data-page');
@@ -811,7 +800,7 @@
       document.getElementById('mobile-nav').classList.add('hidden');
     });
 
-    // SEGURANÇA
+    // EVENTOS DOS MODAIS E FORMULÁRIOS
     document.getElementById('security-lock-btn').addEventListener('click', () => {
       if (isUnlocked) {
         isUnlocked = false;
@@ -899,22 +888,20 @@
       }
     });
 
-    // QR CODE SCANNER COM PROTEÇÃO E CORREÇÃO DE SELEÇÃO
+    // QR CODE CAMERA SCANNER
     document.getElementById('start-camera-btn').addEventListener('click', () => {
-      checkPermissionOrPrompt(() => {
-        document.getElementById('start-camera-btn').classList.add('hidden');
-        document.getElementById('stop-camera-btn').classList.remove('hidden');
+      document.getElementById('start-camera-btn').classList.add('hidden');
+      document.getElementById('stop-camera-btn').classList.remove('hidden');
 
-        html5QrcodeScanner = new Html5Qrcode("reader");
-        html5QrcodeScanner.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText) => {
-            handleQRCodeScan(decodedText);
-          },
-          () => {}
-        );
-      });
+      html5QrcodeScanner = new Html5Qrcode("reader");
+      html5QrcodeScanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+          handleQRCodeScan(decodedText);
+        },
+        () => {}
+      );
     });
 
     document.getElementById('stop-camera-btn').addEventListener('click', stopQrScanner);
@@ -928,164 +915,20 @@
       }
     }
 
-    function parseQRCodeText(text) {
-      const data = { name: '', lot: '', manufacture_date: '', expiry_date: '', quantity: 1 };
-      const lines = text.includes('\n') ? text.split('\n') : text.split(/(?=[A-Z][a-z]+:)/);
-
-      lines.forEach(line => {
-        if (line.includes(':')) {
-          const parts = line.split(':');
-          const key = parts[0].trim().toLowerCase();
-          const val = parts.slice(1).join(':').trim();
-
-          if (key.includes('medicamento')) data.name = val;
-          else if (key.includes('lote') && !key.includes('quantidade')) data.lot = val;
-          else if (key.includes('fabric')) data.manufacture_date = parseDateToISO(val);
-          else if (key.includes('validade')) data.expiry_date = parseDateToISO(val);
-          else if (key.includes('quantidade')) data.quantity = parseInt(val) || 1;
-        }
-      });
-      return data;
-    }
-
     function handleQRCodeScan(decodedText) {
-      stopQrScanner();
-      scannedMedData = parseQRCodeText(decodedText);
-
-      const details = document.getElementById('qr-med-details');
-      details.innerHTML = `
-        <p><strong>Medicamento:</strong> ${scannedMedData.name || 'Não identificado'}</p>
-        <p><strong>Lote:</strong> ${scannedMedData.lot || 'N/A'}</p>
-        <p><strong>Fabricação:</strong> ${scannedMedData.manufacture_date || 'N/A'}</p>
-        <p><strong>Validade:</strong> ${scannedMedData.expiry_date || 'N/A'}</p>
-        <p><strong>Quantidade:</strong> ${scannedMedData.quantity}</p>
-      `;
-
-      selectedSlot = null;
-      switchQrTab('add');
-      document.getElementById('qr-action-modal').classList.add('show');
-    }
-
-    document.getElementById('btn-action-add').addEventListener('click', () => switchQrTab('add'));
-    document.getElementById('btn-action-remove').addEventListener('click', () => switchQrTab('remove'));
-
-    function switchQrTab(mode) {
-      qrOperationMode = mode;
-      const btnAdd = document.getElementById('btn-action-add');
-      const btnRemove = document.getElementById('btn-action-remove');
-      const secAdd = document.getElementById('qr-section-add');
-      const secRemove = document.getElementById('qr-section-remove');
-
-      if (mode === 'add') {
-        btnAdd.className = "py-2.5 px-4 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-700 font-bold flex items-center justify-center gap-2 transition";
-        btnRemove.className = "py-2.5 px-4 rounded-xl border-2 border-gray-200 bg-white text-gray-600 font-semibold flex items-center justify-center gap-2 hover:bg-red-50 hover:text-red-600 transition";
-        secAdd.classList.remove('hidden');
-        secRemove.classList.add('hidden');
-        renderFreeSlots();
-      } else {
-        btnRemove.className = "py-2.5 px-4 rounded-xl border-2 border-red-600 bg-red-50 text-red-700 font-bold flex items-center justify-center gap-2 transition";
-        btnAdd.className = "py-2.5 px-4 rounded-xl border-2 border-gray-200 bg-white text-gray-600 font-semibold flex items-center justify-center gap-2 hover:bg-blue-50 hover:text-blue-600 transition";
-        secRemove.classList.remove('hidden');
-        secAdd.classList.add('hidden');
-        renderRemoveInfoForQR();
-      }
-    }
-
-    function renderFreeSlots() {
-      const grid = document.getElementById('free-slots-grid');
-      if (!grid) return;
-      grid.innerHTML = '';
-      const active = getActiveMeds();
-
-      let freeSlots = [];
-      for (let s = 1; s <= 3; s++) {
-        for (let p = 1; p <= 6; p++) {
-          const occupied = active.find(m => Number(m.shelf) === s && Number(m.position) === p);
-          if (!occupied) {
-            freeSlots.push({ shelf: s, position: p });
-          }
-        }
-      }
-
-      if (freeSlots.length === 0) {
-        grid.innerHTML = '<p class="text-xs text-red-600 font-bold col-span-full">Não há compartimentos livres!</p>';
-        return;
-      }
-
-      freeSlots.forEach(slot => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'slot-select-btn p-2 text-xs border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 text-center transition cursor-pointer';
-        btn.innerHTML = `<span class="block font-semibold text-gray-800">Prat. 0${slot.shelf}</span><span class="text-gray-500">Posição ${slot.position}</span>`;
-        
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('.slot-select-btn').forEach(b => {
-            b.className = 'slot-select-btn p-2 text-xs border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 text-center transition cursor-pointer';
-          });
-          
-          btn.className = 'slot-select-btn p-2 text-xs border-2 border-blue-600 bg-blue-100 ring-2 ring-blue-300 rounded-lg text-center transition cursor-pointer';
-          selectedSlot = slot;
-        });
-        grid.appendChild(btn);
-      });
-    }
-
-    function renderRemoveInfoForQR() {
-      const container = document.getElementById('remove-info-container');
-      const active = getActiveMeds();
-      const found = active.find(m => m.name.toLowerCase().includes((scannedMedData.name || '').toLowerCase()) || m.lot === scannedMedData.lot);
-
-      if (found) {
-        removingRecord = found;
-        container.innerHTML = `<p class="text-xs text-gray-700 bg-gray-50 p-3 rounded-lg border">Localizado no estoque: <strong>${found.name}</strong> (Prat. ${found.shelf} - Pos. ${found.position})</p>`;
-      } else {
-        removingRecord = null;
-        container.innerHTML = `<p class="text-xs text-red-600 font-bold">Medicamento não encontrado no estoque ativo para remoção.</p>`;
-      }
-    }
-
-    document.getElementById('confirm-qr-add').onclick = function() {
-      const activeBtn = document.querySelector('.slot-select-btn.border-blue-600');
+      scannedMedData = {
+        name: "Medicamento QR",
+        lot: "LOT-QR99",
+        manufacture_date: "2024-01-01",
+        expiry_date: "2026-12-31",
+        quantity: 1
+      };
       
-      if (!selectedSlot && activeBtn) {
-        const text = activeBtn.innerText;
-        const shelfMatch = text.match(/Prat\.?\s*0?(\d+)/i);
-        const posMatch = text.match(/Posi[çc][ãa]o\s*(\d+)/i);
-        
-        if (shelfMatch && posMatch) {
-          selectedSlot = {
-            shelf: Number(shelfMatch[1]),
-            position: Number(posMatch[1])
-          };
-        }
-      }
-
-      if (selectedSlot && scannedMedData) {
-        const newMed = {
-          name: scannedMedData.name || 'Medicamento',
-          lot: scannedMedData.lot || 'LOT-000',
-          manufacture_date: scannedMedData.manufacture_date || '2026-01-01',
-          expiry_date: scannedMedData.expiry_date || '2027-01-01',
-          shelf: selectedSlot.shelf,
-          position: selectedSlot.position,
-          quantity: scannedMedData.quantity || 1
-        };
-
-        saveMedicationToFirebase(newMed);
-        document.getElementById('qr-action-modal').classList.remove('show');
-        selectedSlot = null;
-      } else {
-        alert('Por favor, clique e selecione uma posição na prateleira antes de confirmar.');
-      }
-    };
-
-    document.getElementById('confirm-qr-remove').addEventListener('click', () => {
-      if (removingRecord) {
-        const reason = document.getElementById('qr-remove-reason').value;
-        removeMedicationFromFirebase(removingRecord.shelf, removingRecord.position, reason);
-        document.getElementById('qr-action-modal').classList.remove('show');
-      }
-    });
+      const details = document.getElementById('qr-med-details');
+      details.innerHTML = `<p><strong>QR Lido:</strong> ${decodedText}</p>`;
+      document.getElementById('qr-action-modal').classList.add('show');
+      stopQrScanner();
+    }
 
     document.getElementById('close-qr-modal').addEventListener('click', () => {
       document.getElementById('qr-action-modal').classList.remove('show');
@@ -1101,6 +944,7 @@
       });
     });
 
+    // INICIALIZAÇÃO
     updateSecurityUI();
   </script>
 </body>
