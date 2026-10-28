@@ -507,7 +507,7 @@
         lote: med.lot,
         fabricacao: med.manufacture_date,
         validade: med.expiry_date,
-        quantidade: med.quantity,
+        quantidade: med.quantidade,
         prateleira: med.shelf,
         posicao: med.position,
         ledColor: ledColor,
@@ -519,7 +519,6 @@
       const key = `p${shelf}_pos${position}`;
       db.ref(`prazo-vivo/estoque/${key}`).remove();
 
-      // Log do histórico
       historyLogs.unshift({
         date: new Date().toLocaleString('pt-BR'),
         action: `Removido slot P${shelf}_POS${position}`,
@@ -779,7 +778,7 @@
       });
     }
 
-    // NAVEGAÇÃO ENTRE ABAS
+    // NAVEGAÇÃO
     document.querySelectorAll('.nav-tab').forEach(tab => {
       tab.addEventListener('click', () => {
         const page = tab.getAttribute('data-page');
@@ -800,7 +799,7 @@
       document.getElementById('mobile-nav').classList.add('hidden');
     });
 
-    // EVENTOS DOS MODAIS E FORMULÁRIOS
+    // SEGURANÇA
     document.getElementById('security-lock-btn').addEventListener('click', () => {
       if (isUnlocked) {
         isUnlocked = false;
@@ -888,7 +887,7 @@
       }
     });
 
-    // QR CODE CAMERA SCANNER
+    // QR CODE SCANNER & PARSER CORRIGIDO
     document.getElementById('start-camera-btn').addEventListener('click', () => {
       document.getElementById('start-camera-btn').classList.add('hidden');
       document.getElementById('stop-camera-btn').classList.remove('hidden');
@@ -915,20 +914,147 @@
       }
     }
 
-    function handleQRCodeScan(decodedText) {
-      scannedMedData = {
-        name: "Medicamento QR",
-        lot: "LOT-QR99",
-        manufacture_date: "2024-01-01",
-        expiry_date: "2026-12-31",
-        quantity: 1
-      };
+    function parseQRCodeText(text) {
+      const data = { name: '', lot: '', manufacture_date: '', expiry_date: '', quantity: 1 };
       
-      const details = document.getElementById('qr-med-details');
-      details.innerHTML = `<p><strong>QR Lido:</strong> ${decodedText}</p>`;
-      document.getElementById('qr-action-modal').classList.add('show');
-      stopQrScanner();
+      // Tenta separar por quebras de linha ou espaços caso o texto venha colado
+      const lines = text.includes('\n') ? text.split('\n') : text.split(/(?=[A-Z][a-z]+:)/);
+
+      lines.forEach(line => {
+        if (line.includes(':')) {
+          const parts = line.split(':');
+          const key = parts[0].trim().toLowerCase();
+          const val = parts.slice(1).join(':').trim();
+
+          if (key.includes('medicamento')) data.name = val;
+          else if (key.includes('lote') && !key.includes('quantidade')) data.lot = val;
+          else if (key.includes('fabric')) data.manufacture_date = parseDateToISO(val);
+          else if (key.includes('validade')) data.expiry_date = parseDateToISO(val);
+          else if (key.includes('quantidade')) data.quantity = parseInt(val) || 1;
+        }
+      });
+      return data;
     }
+
+    function handleQRCodeScan(decodedText) {
+      stopQrScanner();
+      scannedMedData = parseQRCodeText(decodedText);
+
+      const details = document.getElementById('qr-med-details');
+      details.innerHTML = `
+        <p><strong>Medicamento:</strong> ${scannedMedData.name || 'Não identificado'}</p>
+        <p><strong>Lote:</strong> ${scannedMedData.lot || 'N/A'}</p>
+        <p><strong>Fabricação:</strong> ${scannedMedData.manufacture_date || 'N/A'}</p>
+        <p><strong>Validade:</strong> ${scannedMedData.expiry_date || 'N/A'}</p>
+        <p><strong>Quantidade:</strong> ${scannedMedData.quantity}</p>
+      `;
+
+      selectedSlot = null;
+      switchQrTab('add');
+      document.getElementById('qr-action-modal').classList.add('show');
+    }
+
+    document.getElementById('btn-action-add').addEventListener('click', () => switchQrTab('add'));
+    document.getElementById('btn-action-remove').addEventListener('click', () => switchQrTab('remove'));
+
+    function switchQrTab(mode) {
+      qrOperationMode = mode;
+      const btnAdd = document.getElementById('btn-action-add');
+      const btnRemove = document.getElementById('btn-action-remove');
+      const secAdd = document.getElementById('qr-section-add');
+      const secRemove = document.getElementById('qr-section-remove');
+
+      if (mode === 'add') {
+        btnAdd.className = "py-2.5 px-4 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-700 font-bold flex items-center justify-center gap-2 transition";
+        btnRemove.className = "py-2.5 px-4 rounded-xl border-2 border-gray-200 bg-white text-gray-600 font-semibold flex items-center justify-center gap-2 hover:bg-red-50 hover:text-red-600 transition";
+        secAdd.classList.remove('hidden');
+        secRemove.classList.add('hidden');
+        renderFreeSlots();
+      } else {
+        btnRemove.className = "py-2.5 px-4 rounded-xl border-2 border-red-600 bg-red-50 text-red-700 font-bold flex items-center justify-center gap-2 transition";
+        btnAdd.className = "py-2.5 px-4 rounded-xl border-2 border-gray-200 bg-white text-gray-600 font-semibold flex items-center justify-center gap-2 hover:bg-blue-50 hover:text-blue-600 transition";
+        secRemove.classList.remove('hidden');
+        secAdd.classList.add('hidden');
+        renderRemoveInfoForQR();
+      }
+    }
+
+    function renderFreeSlots() {
+      const grid = document.getElementById('free-slots-grid');
+      if (!grid) return;
+      grid.innerHTML = '';
+      const active = getActiveMeds();
+      const confirmBtn = document.getElementById('confirm-qr-add');
+      if (confirmBtn) confirmBtn.disabled = true;
+
+      let freeSlots = [];
+      for (let s = 1; s <= 3; s++) {
+        for (let p = 1; p <= 6; p++) {
+          const occupied = active.find(m => Number(m.shelf) === s && Number(m.position) === p);
+          if (!occupied) {
+            freeSlots.push({ shelf: s, position: p });
+          }
+        }
+      }
+
+      if (freeSlots.length === 0) {
+        grid.innerHTML = '<p class="text-xs text-red-600 font-bold col-span-full">Não há compartimentos livres!</p>';
+        return;
+      }
+
+      freeSlots.forEach(slot => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'slot-select-btn p-2 text-xs border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 text-center transition';
+        btn.innerHTML = `<span class="block font-semibold text-gray-800">Prat. 0${slot.shelf}</span><span class="text-gray-500">Posição ${slot.position}</span>`;
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.slot-select-btn').forEach(b => b.className = 'slot-select-btn p-2 text-xs border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 text-center transition');
+          btn.className = 'slot-select-btn p-2 text-xs border-2 border-blue-600 bg-blue-100 ring-2 ring-blue-300 rounded-lg text-center transition';
+          selectedSlot = slot;
+          if (confirmBtn) confirmBtn.disabled = false;
+        });
+        grid.appendChild(btn);
+      });
+    }
+
+    function renderRemoveInfoForQR() {
+      const container = document.getElementById('remove-info-container');
+      const active = getActiveMeds();
+      const found = active.find(m => m.name.toLowerCase().includes((scannedMedData.name || '').toLowerCase()) || m.lot === scannedMedData.lot);
+
+      if (found) {
+        removingRecord = found;
+        container.innerHTML = `<p class="text-xs text-gray-700 bg-gray-50 p-3 rounded-lg border">Localizado no estoque: <strong>${found.name}</strong> (Prat. ${found.shelf} - Pos. ${found.position})</p>`;
+      } else {
+        removingRecord = null;
+        container.innerHTML = `<p class="text-xs text-red-600 font-bold">Medicamento não encontrado no estoque ativo para remoção.</p>`;
+      }
+    }
+
+    document.getElementById('confirm-qr-add').addEventListener('click', () => {
+      if (selectedSlot && scannedMedData) {
+        const newMed = {
+          name: scannedMedData.name || 'Medicamento',
+          lot: scannedMedData.lot || 'LOT-000',
+          manufacture_date: scannedMedData.manufacture_date || '2026-01-01',
+          expiry_date: scannedMedData.expiry_date || '2027-01-01',
+          shelf: selectedSlot.shelf,
+          position: selectedSlot.position,
+          quantity: scannedMedData.quantity || 1
+        };
+
+        saveMedicationToFirebase(newMed);
+        document.getElementById('qr-action-modal').classList.remove('show');
+      }
+    });
+
+    document.getElementById('confirm-qr-remove').addEventListener('click', () => {
+      if (removingRecord) {
+        const reason = document.getElementById('qr-remove-reason').value;
+        removeMedicationFromFirebase(removingRecord.shelf, removingRecord.position, reason);
+        document.getElementById('qr-action-modal').classList.remove('show');
+      }
+    });
 
     document.getElementById('close-qr-modal').addEventListener('click', () => {
       document.getElementById('qr-action-modal').classList.remove('show');
@@ -944,7 +1070,6 @@
       });
     });
 
-    // INICIALIZAÇÃO
     updateSecurityUI();
   </script>
 </body>
