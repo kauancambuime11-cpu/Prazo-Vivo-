@@ -283,7 +283,7 @@
       <div id="qr-section-add" class="space-y-3">
         <label class="block text-sm font-semibold text-gray-800">Selecione uma Posição Livre:</label>
         <div id="free-slots-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1"></div>
-        <button id="confirm-qr-add" disabled class="w-full py-2.5 bg-blue-600 disabled:bg-gray-300 text-white rounded-xl font-semibold mt-3 hover:bg-blue-700 transition">
+        <button id="confirm-qr-add" class="w-full py-2.5 bg-blue-600 text-white rounded-xl font-semibold mt-3 hover:bg-blue-700 transition cursor-pointer">
           Confirmar Entrada
         </button>
       </div>
@@ -999,8 +999,6 @@
       if (!grid) return;
       grid.innerHTML = '';
       const active = getActiveMeds();
-      const confirmBtn = document.getElementById('confirm-qr-add');
-      if (confirmBtn) confirmBtn.disabled = true;
 
       let freeSlots = [];
       for (let s = 1; s <= 3; s++) {
@@ -1030,12 +1028,6 @@
           
           btn.className = 'slot-select-btn p-2 text-xs border-2 border-blue-600 bg-blue-100 ring-2 ring-blue-300 rounded-lg text-center transition cursor-pointer';
           selectedSlot = slot;
-          
-          if (confirmBtn) {
-            confirmBtn.disabled = false;
-            confirmBtn.classList.remove('bg-gray-300');
-            confirmBtn.classList.add('bg-blue-600', 'hover:bg-blue-700');
-          }
         });
         grid.appendChild(btn);
       });
@@ -1055,7 +1047,8 @@
       }
     }
 
-    document.getElementById('confirm-qr-add').addEventListener('click', () => {
+    // BOTÃO DE CONFIRMAÇÃO DE ENTRADA CORRIGIDO (FUNCIONA DIRETO)
+    document.getElementById('confirm-qr-add').onclick = function() {
       const activeBtn = document.querySelector('.slot-select-btn.border-blue-600');
       
       if (!selectedSlot && activeBtn) {
@@ -1086,9 +1079,9 @@
         document.getElementById('qr-action-modal').classList.remove('show');
         selectedSlot = null;
       } else {
-        alert('Por favor, selecione uma posição válida na prateleira antes de confirmar.');
+        alert('Por favor, clique e selecione uma posição na prateleira antes de confirmar.');
       }
-    });
+    };
 
     document.getElementById('confirm-qr-remove').addEventListener('click', () => {
       if (removingRecord) {
