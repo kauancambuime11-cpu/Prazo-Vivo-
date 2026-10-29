@@ -1032,42 +1032,90 @@ function qrFillEntryFields(item) {
 }
 
 
+
 async function handleQRCodeScan(decodedText) {
- 
-const qrText = decodedText.trim();
-let qrKey = qrText;
-
-// Aceita QR com posição, como p1_pos1.
-if (!/^p[1-3]_pos[1-6]$/.test(qrKey)) {
-  // Aceita também QR com os dados completos do medicamento.
-  const nome = qrText.match(/Medicamento:\s*(.*?)(?=\s+Lote:|$)/i)?.[1]?.trim();
-  const lote = qrText.match(/Lote:\s*(.*?)(?=\s+Fabricação:|$)/i)?.[1]?.trim();
-  const fabricacao = qrText.match(/Fabricação:\s*(.*?)(?=\s+Validade:|$)/i)?.[1]?.trim();
-  const validade = qrText.match(/Validade:\s*(.*?)(?=\s+Quantidade:|$)/i)?.[1]?.trim();
-  const quantidade = qrText.match(/Quantidade:\s*(\d+)/i)?.[1];
-
-  if (!nome || !lote || !fabricacao || !validade || !quantidade) {
-    alert('Não consegui identificar os dados do medicamento no QR Code.');
-    return;
-  }
-
-  // Guarda os dados para preencher depois de selecionar a posição.
-  window.qrImportedMedicine = {
-    nome,
-    lote,
-    fabricacao,
-    validade,
-    quantidade: Number(quantidade)
-  };
-
-  alert('Medicamento identificado! Agora precisamos selecionar a posição da prateleira.');
-  return;
-}
-
-window.qrImportedMedicine = null;
-
+  const qrText = decodedText.trim();
+  let qrKey = qrText;
 
   try {
+    window.qrImportedMedicine = null;
+
+    // Se o QR contém os dados do medicamento, interpreta as informações.
+    if (!/^p[1-3]_pos[1-6]$/.test(qrKey)) {
+      const nome = qrText.match(/Medicamento:\s*(.*?)(?=\s+Lote:|$)/i)?.[1]?.trim();
+      const lote = qrText.match(/Lote:\s*(.*?)(?=\s+Fabricação:|$)/i)?.[1]?.trim();
+      const fabricacao = qrText.match(/Fabricação:\s*(.*?)(?=\s+Validade:|$)/i)?.[1]?.trim();
+      const validade = qrText.match(/Validade:\s*(.*?)(?=\s+Quantidade:|$)/i)?.[1]?.trim();
+      const quantidade = Number(qrText.match(/Quantidade:\s*(\d+)/i)?.[1]);
+
+      if (!nome || !lote || !fabricacao || !validade ||
+          !Number.isInteger(quantidade) || quantidade < 1) {
+        alert('Não consegui identificar todos os dados do medicamento no QR Code.');
+        return;
+      }
+
+      // Converte datas DD/MM/AAAA para AAAA-MM-DD,
+      // formato utilizado pelos campos de data do site.
+      function converterData(data) {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(data)) return data;
+
+        const partes = data.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (!partes) throw new Error('Confira o formato das datas no QR Code.');
+
+        return `${partes[3]}-${partes[2]}-${partes[1]}`;
+      }
+
+      window.qrImportedMedicine = {
+        nome,
+        lote,
+        fabricacao: converterData(fabricacao),
+        validade: converterData(validade),
+        quantidade
+      };
+
+      // Procura o mesmo medicamento no estoque.
+      const chaves = [];
+      for (let p = 1; p <= 3; p++) {
+        for (let pos = 1; pos <= 6; pos++) {
+          chaves.push(`p${p}_pos${pos}`);
+        }
+      }
+
+      const snapshots = await Promise.all(
+        chaves.map(key => db.ref(`prazo-vivo/estoque/${key}`).once('value'))
+      );
+
+      let chaveEncontrada = null;
+      let primeiraLivre = null;
+
+      for (let i = 0; i < snapshots.length; i++) {
+        const item = snapshots[i].exists() ? snapshots[i].val() : null;
+        const ocupado = item && !item.removed;
+
+        if (!ocupado && primeiraLivre === null) {
+          primeiraLivre = chaves[i];
+        }
+
+        if (
+          ocupado &&
+          String(item.nome || '').trim().toLowerCase() === nome.toLowerCase() &&
+          String(item.lote || '').trim().toLowerCase() === lote.toLowerCase()
+        ) {
+          chaveEncontrada = chaves[i];
+          break;
+        }
+      }
+
+      // Se já existe, usa a posição correspondente.
+      // Caso contrário, escolhe a primeira posição livre.
+      qrKey = chaveEncontrada || primeiraLivre;
+
+      if (!qrKey) {
+        alert('Não há posições livres para esse medicamento.');
+        return;
+      }
+    }
+
     const snapshot = await db.ref(`prazo-vivo/estoque/${qrKey}`).once('value');
 
     qrScannedKey = qrKey;
@@ -1078,11 +1126,30 @@ window.qrImportedMedicine = null;
     }
 
     const parts = qrKey.match(/^p([1-3])_pos([1-6])$/);
+
     qrElement('qr-slot-label').textContent =
       `Prateleira ${parts[1]} • Posição ${parts[2]}`;
 
     qrFillDetails(qrExistingItem);
     qrFillEntryFields(qrExistingItem);
+
+    // Mostra os dados lidos quando a posição está livre.
+    if (window.qrImportedMedicine && !qrExistingItem) {
+      const med = window.qrImportedMedicine;
+      qrElement('qr-med-details').textContent =
+        `Medicamento: ${med.nome}\n` +
+        `Lote: ${med.lote}\n` +
+        `Fabricação: ${med.fabricacao}\n` +
+        `Validade: ${med.validade}\n` +
+        `Quantidade no QR Code: ${med.quantidade}`;
+      qrElement('qr-med-details').style.whiteSpace = 'pre-line';
+    }
+
+    // Mantém a quantidade informada no QR Code.
+    if (window.qrImportedMedicine) {
+      qrElement('qr-med-quantity').value =
+        window.qrImportedMedicine.quantidade;
+    }
 
     qrElement('qr-remove-quantity').value = 1;
     qrElement('qr-operation-message').textContent =
@@ -1099,10 +1166,11 @@ window.qrImportedMedicine = null;
       stopQrScanner();
     }
   } catch (error) {
-    console.error('Erro ao consultar o Firebase:', error);
-    alert('Não foi possível consultar o medicamento. Verifique a conexão com o Firebase.');
+    console.error('Erro ao ler QR Code:', error);
+    alert(error.message || 'Não foi possível ler os dados ou consultar o Firebase.');
   }
 }
+
 
 // Botões de seleção da operação
 qrElement('btn-action-add').addEventListener('click', () => {
