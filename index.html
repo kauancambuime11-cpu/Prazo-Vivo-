@@ -915,14 +915,72 @@
       }
     }
 
-    function handleQRCodeScan(decodedText) {
-      scannedMedData = {
-        name: "Medicamento QR",
-        lot: "LOT-QR99",
-        manufacture_date: "2024-01-01",
-        expiry_date: "2026-12-31",
-        quantity: 1
-      };
+   
+async function handleQRCodeScan(decodedText) {
+  const qrKey = decodedText.trim();
+
+  // O QR Code precisa conter uma chave como p1_pos1
+  if (!/^p[1-3]_pos[1-6]$/.test(qrKey)) {
+    alert('QR Code inválido. Use o código da posição, por exemplo: p1_pos1.');
+    return;
+  }
+
+  try {
+    const snapshot = await db.ref(`prazo-vivo/estoque/${qrKey}`).once('value');
+
+    if (!snapshot.exists()) {
+      alert('Nenhum medicamento encontrado nessa posição.');
+      return;
+    }
+
+    const item = snapshot.val();
+
+    if (item.removed || !item.nome) {
+      alert('Essa posição está livre.');
+      return;
+    }
+
+    scannedMedData = {
+      key: qrKey,
+      name: item.nome,
+      lot: item.lote || 'N/A',
+      manufacture_date: item.fabricacao || '',
+      expiry_date: item.validade,
+      quantity: Number(item.quantidade || 0),
+      shelf: Number(item.prateleira),
+      position: Number(item.posicao)
+    };
+
+    // Atualiza a cor no Firebase para o ESP32 consultar
+    const status = getStatus(scannedMedData.expiry_date);
+    const ledColor = getLedColorForESP(status);
+    
+function getLedColorForESP(status) {
+  if (status === 'ok') return 'verde';
+  if (status === 'attention') return 'amarelo';
+  if (status === 'danger' || status === 'expired') return 'vermelho';
+  return 'desligado';
+}
+
+
+    await db.ref(`prazo-vivo/estoque/${qrKey}`).update({
+      ledColor: ledColor
+    });
+
+    document.getElementById('qr-med-details').textContent =
+      `${scannedMedData.name} | Lote: ${scannedMedData.lot} | ` +
+      `Prateleira ${scannedMedData.shelf}, posição ${scannedMedData.position} | ` +
+      `Validade: ${scannedMedData.expiry_date} | LED: ${ledColor}`;
+
+    document.getElementById('qr-action-modal').classList.add('show');
+
+    stopQrScanner();
+  } catch (error) {
+    console.error('Erro ao consultar o Firebase:', error);
+    alert('Não foi possível consultar o medicamento. Verifique a conexão com o Firebase.');
+  }
+}
+
       
       const details = document.getElementById('qr-med-details');
       details.innerHTML = `<p><strong>QR Lido:</strong> ${decodedText}</p>`;
