@@ -513,7 +513,7 @@
         lote: med.lot,
         fabricacao: med.manufacture_date,
         validade: med.expiry_date,
-        quantidade: med.quantidade,
+        quantidade: med.quantity,
         prateleira: med.shelf,
         posicao: med.position,
         ledColor: ledColor,
@@ -1076,7 +1076,6 @@
       const activeBtn = document.querySelector('.slot-select-btn.border-blue-600' );
       
       if (!selectedSlot && activeBtn) {
-        console.log("ENTROU NO IF")
         const text = activeBtn.innerText;
         const shelfMatch = text.match(/Prat\.?\s*0?(\d+)/i);
         const posMatch = text.match(/Posi[çc][ãa]o\s*(\d+)/i);
@@ -1092,7 +1091,6 @@
       }
 
       if (!selectedSlot) {
-         console.log("NÃOACHOUSLOT")
         const firstSlotBtn = document.querySelector('.slot-select-btn');
         if (firstSlotBtn) {
           const text = firstSlotBtn.innerText;
