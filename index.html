@@ -936,21 +936,43 @@
 
     function parseQRCodeText(text) {
       const data = { name: '', lot: '', manufacture_date: '', expiry_date: '', quantity: 1 };
-      const lines = text.includes('\n') ? text.split('\n') : text.split(/(?=[A-Z][a-z]+:)/);
+      
+      if (text.includes('{') && text.includes('}')) {
+        try {
+          const parsed = JSON.parse(text);
+          return {
+            name: parsed.nome || parsed.name || 'Medicamento',
+            lot: parsed.lote || parsed.lot || 'LOT-000',
+            manufacture_date: parseDateToISO(parsed.fabricacao || parsed.manufacture_date || '2026-01-01'),
+            expiry_date: parseDateToISO(parsed.validade || parsed.expiry_date || '2027-01-01'),
+            quantity: Number(parsed.quantidade || parsed.quantity || 1)
+          };
+        } catch(e) {}
+      }
+
+      const lines = text.split(/\r?\n|,|;/);
 
       lines.forEach(line => {
-        if (line.includes(':')) {
-          const parts = line.split(':');
+        const parts = line.split(':');
+        if (parts.length >= 2) {
           const key = parts[0].trim().toLowerCase();
           const val = parts.slice(1).join(':').trim();
 
-          if (key.includes('medicamento')) data.name = val;
-          else if (key.includes('lote') && !key.includes('quantidade')) data.lot = val;
+          if (key.includes('medicamento') || key.includes('nome')) data.name = val;
+          else if (key.includes('lote')) data.lot = val;
           else if (key.includes('fabric')) data.manufacture_date = parseDateToISO(val);
           else if (key.includes('validade')) data.expiry_date = parseDateToISO(val);
           else if (key.includes('quantidade')) data.quantity = parseInt(val) || 1;
         }
       });
+
+      if (!data.name && text.trim().length > 0) {
+        data.name = text.trim();
+      }
+      if (!data.expiry_date) {
+        data.expiry_date = '2027-01-01';
+      }
+
       return data;
     }
 
@@ -1024,7 +1046,6 @@
         btn.className = 'slot-select-btn p-2 text-xs border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 text-center transition cursor-pointer';
         btn.innerHTML = `<span class="block font-semibold text-gray-800">Prat. 0${slot.shelf}</span><span class="text-gray-500">Posição ${slot.position}</span>`;
         
-        // Garante que ao clicar, salvamos o objeto slot diretamente na variável global
         btn.addEventListener('click', () => {
           document.querySelectorAll('.slot-select-btn').forEach(b => {
             b.className = 'slot-select-btn p-2 text-xs border border-gray-200 rounded-lg hover:bg-blue-50 hover:border-blue-300 text-center transition cursor-pointer';
@@ -1051,8 +1072,7 @@
       }
     }
 
-document.getElementById('confirm-qr-add').onclick = function() {
-      // Se o utilizador não clicou explicitamente num botão mas há um selecionado visualmente
+    document.getElementById('confirm-qr-add').onclick = function() {
       const activeBtn = document.querySelector('.slot-select-btn.border-blue-600, .slot-select-btn[class*="border-blue"]');
       
       if (!selectedSlot && activeBtn) {
@@ -1068,7 +1088,6 @@ document.getElementById('confirm-qr-add').onclick = function() {
         }
       }
 
-      // Se ainda estiver nulo, pega o primeiro slot livre automaticamente para não travar
       if (!selectedSlot) {
         const firstSlotBtn = document.querySelector('.slot-select-btn');
         if (firstSlotBtn) {
@@ -1092,10 +1111,7 @@ document.getElementById('confirm-qr-add').onclick = function() {
           quantity: Number(scannedMedData.quantity) || 1
         };
 
-        // Envia para o Firebase
         saveMedicationToFirebase(newMed);
-        
-        // Fecha o modal e limpa
         document.getElementById('qr-action-modal').classList.remove('show');
         selectedSlot = null;
 
@@ -1108,7 +1124,7 @@ document.getElementById('confirm-qr-add').onclick = function() {
         
         alert('Medicamento adicionado com sucesso!');
       } else {
-        alert('Por favor, clica e seleciona uma posição na prateleira antes de confirmar.');
+        alert('Por favor, clique e selecione uma posição na prateleira antes de confirmar.');
       }
     };
 
