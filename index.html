@@ -1074,6 +1074,7 @@
 
     document.getElementById('confirm-qr-add').onclick = function() {
       const activeBtn = document.querySelector('.slot-select-btn.border-blue-600, .slot-select-btn[class*="border-blue"]');
+      console.log(activeBtn)
       
       if (!selectedSlot && activeBtn) {
         const text = activeBtn.innerText;
