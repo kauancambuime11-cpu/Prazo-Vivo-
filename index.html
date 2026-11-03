@@ -462,6 +462,12 @@
 
     function parseDateToISO(dateStr) {
       if (!dateStr) return new Date().toISOString().split('T')[0];
+      if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+          return `${parts[2]}-${parts[1]}-${parts[0]}`;
+        }
+      }
       if (dateStr.includes('-')) {
         const parts = dateStr.split('-');
         if (parts[0].length === 2 && parts[2].length === 4) {
@@ -1045,9 +1051,9 @@
     }
 
     document.getElementById('confirm-qr-add').onclick = function() {
-      const activeBtn = document.querySelector('.slot-select-btn.border-blue-600');
+      const activeBtn = document.querySelector('.slot-select-btn.border-blue-600, .slot-select-btn[class*="border-blue"]');
       
-      if (!selectedSlot && activeBtn) {
+      if (activeBtn) {
         const text = activeBtn.innerText;
         const shelfMatch = text.match(/Prat\.?\s*0?(\d+)/i);
         const posMatch = text.match(/Posi[çc][ãa]o\s*(\d+)/i);
@@ -1057,6 +1063,18 @@
             shelf: Number(shelfMatch[1]),
             position: Number(posMatch[1])
           };
+        }
+      }
+
+      if (!selectedSlot) {
+        const firstSlotBtn = document.querySelector('.slot-select-btn');
+        if (firstSlotBtn) {
+          const text = firstSlotBtn.innerText;
+          const shelfMatch = text.match(/Prat\.?\s*0?(\d+)/i);
+          const posMatch = text.match(/Posi[çc][ãa]o\s*(\d+)/i);
+          if (shelfMatch && posMatch) {
+            selectedSlot = { shelf: Number(shelfMatch[1]), position: Number(posMatch[1]) };
+          }
         }
       }
 
@@ -1074,6 +1092,13 @@
         saveMedicationToFirebase(newMed);
         document.getElementById('qr-action-modal').classList.remove('show');
         selectedSlot = null;
+
+        historyLogs.unshift({
+          date: new Date().toLocaleString('pt-BR'),
+          action: `Entrada via QR Code: ${newMed.name}`,
+          reason: `Alocado na Prat. ${newMed.shelf} - Pos. ${newMed.position}`
+        });
+        renderHistory();
       } else {
         alert('Por favor, clique e selecione uma posição na prateleira antes de confirmar.');
       }
